@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Dropdown Management
+// ============================================================
+
+model DropdownCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100) // slug: 'position', 'location', 'fund_line'
+  label     String   @db.VarChar(100)          // display: 'Position', 'Location', 'Fund Line(s)'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  options DropdownOption[]
+
+  @@map("dropdown_category")
+}
+
+model DropdownOption {
+  id         String   @id @default(uuid()) @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  label      String   @db.VarChar(255)
+  value      String   @db.VarChar(255)
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category DropdownCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Requests referencing this option
+  requestsAsPosition  ParRequest[] @relation("PositionOption")
+  requestsAsLocation  ParRequest[] @relation("LocationOption")
+  requestsAsFundLine  ParRequest[] @relation("FundLineOption")
+
+  @@unique([categoryId, value])
+  @@map("dropdown_option")
+}
+
+// ============================================================
+// Approver Configuration
+// ============================================================
+
+model Approver {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  title     String   @db.VarChar(255)
+  email     String?  @db.VarChar(255)
+  sortOrder Int      @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  delegates     ApproverDelegate[]
+  approvalSteps ApprovalStep[]
+
+  @@map("approver")
+}
+
+model ApproverDelegate {
+  id           String   @id @default(uuid()) @db.Uuid
+  approverId   String   @map("approver_id") @db.Uuid
+  delegateName String   @map("delegate_name") @db.VarChar(255)
+  delegateEmail String? @map("delegate_email") @db.VarChar(255)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  approver Approver @relation(fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@unique([approverId, delegateName])
+  @@map("approver_delegate")
+}
+
+// ============================================================
+// Position Authorization Request
+// ============================================================
+
+model ParRequest {
+  id               String   @id @default(uuid()) @db.Uuid
+  jobId            String   @unique @map("job_id") @db.VarChar(20)
+
+  // Dropdown references
+  positionId       String?  @map("position_id") @db.Uuid
+  locationId       String?  @map("location_id") @db.Uuid
+  fundLineId       String?  @map("fund_line_id") @db.Uuid
+
+  // Enum-like fields stored as strings
+  requestType      String   @map("request_type") @db.VarChar(20)       // NEW, REPLACEMENT
+  employmentType   String   @map("employment_type") @db.VarChar(20)    // FULL_TIME, PART_TIME
+  positionDuration String   @map("position_duration") @db.VarChar(20)  // TEMPORARY, REGULAR
+
+  // Post-hire fields
+  newEmployeeName  String?  @map("new_employee_name") @db.VarChar(255)
+  startDate        DateTime? @map("start_date") @db.Date
+  replacedPerson   String?  @map("replaced_person") @db.VarChar(255)
+
+  notes            String?  @db.Text
+
+  // Workflow state
+  status           String   @default("DRAFT") @db.VarChar(20) // DRAFT, PENDING_APPROVAL, APPROVED, KICKED_BACK
+  submittedBy      String?  @map("submitted_by") @db.VarChar(255)
+  submittedAt      DateTime? @map("submitted_at")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  position      DropdownOption? @relation("PositionOption", fields: [positionId], references: [id])
+  location      DropdownOption? @relation("LocationOption", fields: [locationId], references: [id])
+  fundLine      DropdownOption? @relation("FundLineOption", fields: [fundLineId], references: [id])
+  approvalSteps ApprovalStep[]
+
+  @@map("par_request")
+}
+
+// ============================================================
+// Approval Workflow Steps
+// ============================================================
+
+model ApprovalStep {
+  id              String   @id @default(uuid()) @db.Uuid
+  requestId       String   @map("request_id") @db.Uuid
+  approverId      String   @map("approver_id") @db.Uuid
+  stepOrder       Int      @map("step_order")
+
+  status          String   @default("PENDING") @db.VarChar(20) // PENDING, APPROVED, KICKED_BACK
+  approvedBy      String?  @map("approved_by") @db.VarChar(255) // name of person who approved (could be delegate)
+  approvedAt      DateTime? @map("approved_at")
+
+  kickBackToStep  Int?     @map("kick_back_to_step")
+  kickBackReason  String?  @map("kick_back_reason") @db.Text
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  request  ParRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver Approver   @relation(fields: [approverId], references: [id])
+
+  @@unique([requestId, approverId])
+  @@map("approval_step")
+}
+
+// ============================================================
+// Job ID Counter (singleton)
+// ============================================================
+
+model JobIdCounter {
+  id              Int @id @default(1)
+  currentYear     Int @map("current_year")
+  currentSequence Int @default(0) @map("current_sequence")
+
+  @@map("job_id_counter")
+}
+
+// ============================================================
+// Audit Log
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityType String   @map("entity_type") @db.VarChar(50) // PAR_REQUEST, APPROVAL_STEP, DROPDOWN_OPTION, etc.
+  entityId   String   @map("entity_id") @db.Uuid
+  action     String   @db.VarChar(50) // CREATED, UPDATED, APPROVED, KICKED_BACK, SUBMITTED
+  changedBy  String?  @map("changed_by") @db.VarChar(255)
+  changes    Json?    // { field: { old: X, new: Y } }
+  metadata   Json?    // extra context
+
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
