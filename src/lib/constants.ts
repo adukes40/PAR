@@ -4,6 +4,7 @@ export const REQUEST_STATUS = {
   PENDING_APPROVAL: "PENDING_APPROVAL",
   APPROVED: "APPROVED",
   KICKED_BACK: "KICKED_BACK",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export type RequestStatus = (typeof REQUEST_STATUS)[keyof typeof REQUEST_STATUS];
@@ -51,6 +52,26 @@ export const DROPDOWN_CATEGORIES = {
 export type DropdownCategorySlug =
   (typeof DROPDOWN_CATEGORIES)[keyof typeof DROPDOWN_CATEGORIES];
 
+// User roles
+export const USER_ROLE = {
+  ADMIN: "ADMIN",
+  HR: "HR",
+  AUTHORIZER: "AUTHORIZER",
+  USER: "USER",
+} as const;
+
+export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: "Administrator",
+  HR: "HR",
+  AUTHORIZER: "Authorizer",
+  USER: "User",
+};
+
+// Role priority (highest first) for group-to-role mapping
+export const ROLE_PRIORITY: UserRole[] = ["ADMIN", "HR", "AUTHORIZER", "USER"];
+
 // Audit log entity types
 export const AUDIT_ENTITY_TYPE = {
   PAR_REQUEST: "PAR_REQUEST",
@@ -59,6 +80,7 @@ export const AUDIT_ENTITY_TYPE = {
   DROPDOWN_CATEGORY: "DROPDOWN_CATEGORY",
   APPROVER: "APPROVER",
   APPROVER_DELEGATE: "APPROVER_DELEGATE",
+  USER: "USER",
 } as const;
 
 export type AuditEntityType =
@@ -83,6 +105,7 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   PENDING_APPROVAL: "Pending Approval",
   APPROVED: "Approved",
   KICKED_BACK: "Kicked Back",
+  CANCELLED: "Cancelled",
 };
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {

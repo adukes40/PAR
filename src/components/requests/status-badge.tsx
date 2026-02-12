@@ -6,6 +6,7 @@ const statusVariantMap: Record<string, "default" | "secondary" | "destructive" |
   PENDING_APPROVAL: "warning",
   APPROVED: "success",
   KICKED_BACK: "destructive",
+  CANCELLED: "outline",
 };
 
 interface StatusBadgeProps {

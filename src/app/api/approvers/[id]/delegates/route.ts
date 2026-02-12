@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { addDelegate, removeDelegate } from "@/lib/db/approvers";
+import { requireHROrAdmin } from "@/lib/auth-helpers";
 
 const addDelegateSchema = z.object({
   delegateName: z.string().min(1, "Name is required").max(255),
   delegateEmail: z.string().email("Invalid email").max(255).optional().or(z.literal("")),
-  changedBy: z.string().max(255).optional(),
 });
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { session, error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const { id } = await params;
 
@@ -29,9 +32,11 @@ export async function POST(
       );
     }
 
+    const changedBy = session.user.name || session.user.email;
     const delegate = await addDelegate({
       approverId: id,
       ...parsed.data,
+      changedBy,
     });
 
     return NextResponse.json({ data: delegate }, { status: 201 });
@@ -57,10 +62,12 @@ export async function POST(
 
 const deleteDelegateSchema = z.object({
   delegateId: z.string().uuid("Invalid delegate ID"),
-  changedBy: z.string().max(255).optional(),
 });
 
 export async function DELETE(request: Request) {
+  const { session, error: authError } = await requireHROrAdmin();
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const parsed = deleteDelegateSchema.safeParse(body);
@@ -72,7 +79,8 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await removeDelegate(parsed.data.delegateId, parsed.data.changedBy);
+    const changedBy = session.user.name || session.user.email;
+    await removeDelegate(parsed.data.delegateId, changedBy);
     return NextResponse.json({ message: "Delegate removed" });
   } catch (error) {
     if (error instanceof Error && error.message === "Delegate not found") {

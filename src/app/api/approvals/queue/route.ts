@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getApprovalQueue } from "@/lib/db/approvals";
+import { requireAuth } from "@/lib/auth-helpers";
 
 export async function GET(request: NextRequest) {
+  const { error } = await requireAuth();
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(request.url);
     const approverId = searchParams.get("approverId");

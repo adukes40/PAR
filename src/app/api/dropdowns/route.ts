@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAllCategories, getActiveOptionsByCategory } from "@/lib/db/dropdowns";
+import { requireAuth } from "@/lib/auth-helpers";
 
 export async function GET(request: Request) {
+  const { error } = await requireAuth();
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("activeOnly") === "true";

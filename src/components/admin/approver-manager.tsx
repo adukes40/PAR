@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,11 +29,10 @@ import {
   Plus,
   Pencil,
   Trash2,
-  ArrowUp,
-  ArrowDown,
   UserPlus,
   X,
   Users,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -74,6 +73,11 @@ export function ApproverManager({ approvers: initialApprovers }: ApproverManager
   const [editName, setEditName] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editEmail, setEditEmail] = useState("");
+
+  // Drag-and-drop state
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   // Form state for adding delegate
   const [delegateName, setDelegateName] = useState("");
@@ -207,18 +211,18 @@ export function ApproverManager({ approvers: initialApprovers }: ApproverManager
     }
   }
 
-  async function handleMoveApprover(approver: Approver, direction: "up" | "down") {
-    const currentIndex = activeApprovers.findIndex((a) => a.id === approver.id);
-    if (
-      (direction === "up" && currentIndex === 0) ||
-      (direction === "down" && currentIndex === activeApprovers.length - 1)
-    ) {
-      return;
-    }
+  const handleDragEnd = useCallback(async () => {
+    const from = dragItem.current;
+    const to = dragOverItem.current;
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setDragIndex(null);
+
+    if (from === null || to === null || from === to) return;
 
     const newOrder = activeApprovers.map((a) => a.id);
-    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    [newOrder[currentIndex], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[currentIndex]];
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(to, 0, moved);
 
     try {
       const res = await fetch("/api/approvers", {
@@ -237,7 +241,7 @@ export function ApproverManager({ approvers: initialApprovers }: ApproverManager
         variant: "destructive",
       });
     }
-  }
+  }, [activeApprovers]);
 
   async function handleAddDelegate() {
     if (!addingDelegateTo || !delegateName.trim()) return;
@@ -368,9 +372,26 @@ export function ApproverManager({ approvers: initialApprovers }: ApproverManager
             </div>
           )}
           {activeApprovers.map((approver, index) => (
-            <div key={approver.id} className="p-4">
+            <div
+              key={approver.id}
+              draggable
+              onDragStart={() => {
+                dragItem.current = index;
+                setDragIndex(index);
+              }}
+              onDragEnter={() => {
+                dragOverItem.current = index;
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragEnd={handleDragEnd}
+              className={
+                "p-4" +
+                (dragIndex === index ? " opacity-50" : "")
+              }
+            >
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">
                   {index + 1}
                 </div>
 
@@ -383,24 +404,6 @@ export function ApproverManager({ approvers: initialApprovers }: ApproverManager
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handleMoveApprover(approver, "up")}
-                    disabled={index === 0}
-                  >
-                    <ArrowUp className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handleMoveApprover(approver, "down")}
-                    disabled={index === activeApprovers.length - 1}
-                  >
-                    <ArrowDown className="h-3 w-3" />
-                  </Button>
 
                   {/* Edit */}
                   <Dialog

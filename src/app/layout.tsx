@@ -1,22 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { SidebarProvider } from "@/hooks/use-sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "PAR - Position Authorization Request",
-  description: "Caesar Rodney School District Position Authorization Request System",
+  description: "Position Authorization Request System",
 };
 
 export default function RootLayout({
@@ -27,17 +30,23 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${jetbrainsMono.variable} antialiased`}
       >
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto bg-background">
-            <div className="container mx-auto p-6">
-              {children}
-            </div>
-          </main>
-        </div>
-        <Toaster />
+        <AuthSessionProvider>
+          <SidebarProvider>
+            <TooltipProvider>
+              <div className="flex h-screen overflow-hidden">
+                <Sidebar />
+                <main className="flex-1 overflow-y-auto bg-background transition-all duration-300 ease-in-out">
+                  <div className="container mx-auto p-6">
+                    {children}
+                  </div>
+                </main>
+              </div>
+            </TooltipProvider>
+          </SidebarProvider>
+          <Toaster />
+        </AuthSessionProvider>
       </body>
     </html>
   );

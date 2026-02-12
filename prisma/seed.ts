@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -36,141 +37,46 @@ async function main() {
     },
   });
 
-  // Position options
-  const positions = [
-    "General Worker 3hr",
-    "General Worker 4hr",
-    "General Worker 6hr",
-    "Custodian",
-    "Secretary",
-    "Paraprofessional",
-    "Teacher",
-    "Nurse",
-    "Bus Driver",
-    "Cafeteria Worker",
+  // Example options (one per category — delete and replace with real data)
+  const examples = [
+    { category: positionCategory, label: "Example Position", value: "example_position" },
+    { category: locationCategory, label: "Example Location", value: "example_location" },
+    { category: fundLineCategory, label: "Example Fund Line", value: "example_fund_line" },
   ];
 
-  for (let i = 0; i < positions.length; i++) {
+  for (const ex of examples) {
     await prisma.dropdownOption.upsert({
       where: {
         categoryId_value: {
-          categoryId: positionCategory.id,
-          value: positions[i].toLowerCase().replace(/\s+/g, "_"),
+          categoryId: ex.category.id,
+          value: ex.value,
         },
       },
-      update: { sortOrder: i },
+      update: {},
       create: {
-        categoryId: positionCategory.id,
-        label: positions[i],
-        value: positions[i].toLowerCase().replace(/\s+/g, "_"),
-        sortOrder: i,
+        categoryId: ex.category.id,
+        label: ex.label,
+        value: ex.value,
+        sortOrder: 0,
       },
     });
   }
 
-  // Location options
-  const locations = [
-    "FMS",
-    "CRHS",
-    "Allen Frear Elementary",
-    "W. Reily Brown Elementary",
-    "Star Hill Elementary",
-    "Nellie Stokes Elementary",
-    "District Office",
-    "Dover Air Base Middle School",
-    "Simpson Elementary",
-    "Postlethwait Middle School",
-  ];
+  console.log("  ✓ Dropdown categories and example options seeded");
 
-  for (let i = 0; i < locations.length; i++) {
-    await prisma.dropdownOption.upsert({
-      where: {
-        categoryId_value: {
-          categoryId: locationCategory.id,
-          value: locations[i].toLowerCase().replace(/\s+/g, "_"),
-        },
-      },
-      update: { sortOrder: i },
-      create: {
-        categoryId: locationCategory.id,
-        label: locations[i],
-        value: locations[i].toLowerCase().replace(/\s+/g, "_"),
-        sortOrder: i,
+  // Example approver (delete and replace with real approvers)
+  const existingApprover = await prisma.approver.findFirst();
+  if (!existingApprover) {
+    await prisma.approver.create({
+      data: {
+        name: "Example Approver",
+        title: "Example Title",
+        sortOrder: 1,
       },
     });
   }
 
-  // Fund Line options
-  const fundLines = [
-    "Child Nutrition General Fund",
-    "General Fund",
-    "Title I",
-    "Title II",
-    "IDEA",
-    "State Funds",
-    "Local Funds",
-  ];
-
-  for (let i = 0; i < fundLines.length; i++) {
-    await prisma.dropdownOption.upsert({
-      where: {
-        categoryId_value: {
-          categoryId: fundLineCategory.id,
-          value: fundLines[i].toLowerCase().replace(/\s+/g, "_"),
-        },
-      },
-      update: { sortOrder: i },
-      create: {
-        categoryId: fundLineCategory.id,
-        label: fundLines[i],
-        value: fundLines[i].toLowerCase().replace(/\s+/g, "_"),
-        sortOrder: i,
-      },
-    });
-  }
-
-  console.log("  ✓ Dropdown categories and options seeded");
-
-  // ============================================================
-  // Default Approvers
-  // ============================================================
-
-  const approvers = [
-    {
-      name: "Roger Holt",
-      title: "Director of Human Resources",
-      sortOrder: 1,
-    },
-    {
-      name: "Meaghan Brennan",
-      title: "Director of Business & Finance",
-      sortOrder: 2,
-    },
-    {
-      name: "Dr. Jessilene Corbett",
-      title: "Assistant Superintendent",
-      sortOrder: 3,
-    },
-    {
-      name: "Dr. Corey Miklus",
-      title: "Superintendent",
-      sortOrder: 4,
-    },
-  ];
-
-  for (const approver of approvers) {
-    const existing = await prisma.approver.findFirst({
-      where: { name: approver.name },
-    });
-
-    if (!existing) {
-      await prisma.approver.create({
-        data: approver,
-      });
-    }
-  }
-
-  console.log("  ✓ Default approvers seeded");
+  console.log("  ✓ Example approver seeded");
 
   // ============================================================
   // Job ID Counter
@@ -187,6 +93,37 @@ async function main() {
   });
 
   console.log("  ✓ Job ID counter initialized");
+
+  // ============================================================
+  // Default Admin User
+  // ============================================================
+
+  const adminEmail = process.env.ADMIN_EMAIL || "admin@cr.k12.de.us";
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error("ADMIN_PASSWORD environment variable is required for seeding");
+  }
+
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail },
+  });
+
+  if (!existingAdmin) {
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        name: "Admin",
+        passwordHash,
+        role: "ADMIN",
+      },
+    });
+    console.log(`  ✓ Admin user created (${adminEmail})`);
+    console.log("    ⚠ Change the default admin password after first login!");
+  } else {
+    console.log("  ✓ Admin user already exists — skipping");
+  }
+
   console.log("Seeding complete!");
 }
 

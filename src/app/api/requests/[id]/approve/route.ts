@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { approveStep, kickBack } from "@/lib/db/approvals";
+import { approveStep, kickBack, reopenRequest } from "@/lib/db/approvals";
+import { requireAuth } from "@/lib/auth-helpers";
 
 const approveSchema = z.object({
   approverId: z.string().uuid("Invalid approver ID"),
@@ -19,6 +20,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
     const { id } = await params;
 
     if (!id || !z.string().uuid().safeParse(id).success) {
@@ -44,6 +48,11 @@ export async function POST(
       return NextResponse.json({ data: updated });
     }
 
+    if (action === "reopen") {
+      const updated = await reopenRequest(id, session.user.name || session.user.email);
+      return NextResponse.json({ data: updated });
+    }
+
     if (action === "kick_back") {
       const parsed = kickBackSchema.safeParse(body);
       if (!parsed.success) {
@@ -63,7 +72,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { error: "Invalid action. Must be 'approve' or 'kick_back'" },
+      { error: "Invalid action. Must be 'approve', 'kick_back', or 'reopen'" },
       { status: 400 }
     );
   } catch (error) {
@@ -76,7 +85,9 @@ export async function POST(
         error.message.includes("No pending approval step") ||
         error.message.includes("not the current approval step") ||
         error.message.includes("Not authorized") ||
-        error.message.includes("Approver not found")
+        error.message.includes("Approver not found") ||
+        error.message.includes("can be reopened") ||
+        error.message.includes("No approval steps found")
       ) {
         return NextResponse.json({ error: error.message }, { status: 409 });
       }

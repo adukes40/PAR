@@ -27,12 +27,8 @@ export default async function EditRequestPage({
     employmentType: request.employmentType,
     positionDuration: request.positionDuration,
     newEmployeeName: request.newEmployeeName,
-    startDate: request.startDate
-      ? new Date(request.startDate).toISOString().split("T")[0]
-      : null,
     replacedPerson: request.replacedPerson,
     notes: request.notes,
-    submittedBy: request.submittedBy,
     status: request.status,
   };
 
@@ -46,7 +42,7 @@ export default async function EditRequestPage({
       </PageHeader>
 
       {(request.status === "APPROVED" || request.status === "PENDING_APPROVAL") && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           This request has approvals. Editing may require re-approval from one or more approvers.
         </div>
       )}

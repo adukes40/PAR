@@ -1,0 +1,5 @@
+par.cr.k12.de.us {
+	tls internal
+
+	reverse_proxy localhost:3000
+}

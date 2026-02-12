@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createCategory } from "@/lib/db/dropdowns";
+import { requireHROrAdmin } from "@/lib/auth-helpers";
 
 const createCategorySchema = z.object({
   name: z
@@ -12,6 +13,9 @@ const createCategorySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const { error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const body = await request.json();
     const parsed = createCategorySchema.safeParse(body);

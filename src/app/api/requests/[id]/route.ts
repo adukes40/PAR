@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestById, updateRequest } from "@/lib/db/requests";
+import { requireAuth } from "@/lib/auth-helpers";
 
 const updateRequestSchema = z.object({
   positionId: z.string().uuid().optional().or(z.literal("")),
@@ -13,7 +14,6 @@ const updateRequestSchema = z.object({
   startDate: z.string().nullable().optional(),
   replacedPerson: z.string().max(255).optional(),
   notes: z.string().optional(),
-  changedBy: z.string().max(255).optional(),
 });
 
 export async function GET(
@@ -21,6 +21,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
     const { id } = await params;
 
     if (!z.string().uuid().safeParse(id).success) {
@@ -47,6 +50,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
     const { id } = await params;
 
     if (!z.string().uuid().safeParse(id).success) {
@@ -63,7 +69,7 @@ export async function PATCH(
       );
     }
 
-    const par = await updateRequest(id, parsed.data);
+    const par = await updateRequest(id, { ...parsed.data, changedBy: session.user.name || session.user.email });
     return NextResponse.json({ data: par });
   } catch (error) {
     if (error instanceof Error && error.message === "Request not found") {

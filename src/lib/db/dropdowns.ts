@@ -45,12 +45,14 @@ export async function getActiveOptionsByCategory() {
     orderBy: { name: "asc" },
   });
 
-  const result: Record<string, { id: string; label: string; value: string }[]> = {};
+  const result: Record<string, { id: string; categoryId: string; label: string; value: string; needsReview: boolean }[]> = {};
   for (const cat of categories) {
     result[cat.name] = cat.options.map((o) => ({
       id: o.id,
+      categoryId: cat.id,
       label: o.label,
       value: o.value,
+      needsReview: o.needsReview,
     }));
   }
   return result;
@@ -94,6 +96,7 @@ export async function createOption(data: {
   categoryId: string;
   label: string;
   value?: string;
+  needsReview?: boolean;
   changedBy?: string;
 }) {
   const category = await prisma.dropdownCategory.findUnique({
@@ -127,6 +130,7 @@ export async function createOption(data: {
       label: data.label.trim(),
       value,
       sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+      needsReview: data.needsReview ?? false,
     },
   });
 
@@ -151,6 +155,7 @@ export async function updateOption(
     value?: string;
     sortOrder?: number;
     isActive?: boolean;
+    needsReview?: boolean;
     changedBy?: string;
   }
 ) {
@@ -167,6 +172,7 @@ export async function updateOption(
   if (data.value !== undefined) updateData.value = data.value.trim();
   if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  if (data.needsReview !== undefined) updateData.needsReview = data.needsReview;
 
   const updated = await prisma.dropdownOption.update({
     where: { id },
@@ -176,7 +182,7 @@ export async function updateOption(
   const changes = computeChanges(
     existing as unknown as Record<string, unknown>,
     updated as unknown as Record<string, unknown>,
-    ["label", "value", "sortOrder", "isActive"]
+    ["label", "value", "sortOrder", "isActive", "needsReview"]
   );
 
   if (changes) {

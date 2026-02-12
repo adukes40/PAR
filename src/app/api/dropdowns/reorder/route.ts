@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { reorderOptions } from "@/lib/db/dropdowns";
+import { requireHROrAdmin } from "@/lib/auth-helpers";
 
 const reorderSchema = z.object({
   categoryId: z.string().uuid("Invalid category ID"),
   optionIds: z.array(z.string().uuid("Invalid option ID")).min(1),
-  changedBy: z.string().max(255).optional(),
 });
 
 export async function POST(request: Request) {
+  const { session, error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const body = await request.json();
     const parsed = reorderSchema.safeParse(body);
@@ -20,7 +23,8 @@ export async function POST(request: Request) {
       );
     }
 
-    await reorderOptions(parsed.data.categoryId, parsed.data.optionIds, parsed.data.changedBy);
+    const changedBy = session.user.name || session.user.email;
+    await reorderOptions(parsed.data.categoryId, parsed.data.optionIds, changedBy);
     return NextResponse.json({ message: "Options reordered successfully" });
   } catch (error) {
     if (error instanceof Error && error.message.includes("does not belong to category")) {

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { useDropdownOptions } from "@/hooks/use-dropdown-options";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -24,6 +25,7 @@ import {
 
 interface RequestFormProps {
   mode: "create" | "edit";
+  defaultBuildingId?: string | null;
   initialData?: {
     id: string;
     positionId: string | null;
@@ -33,33 +35,29 @@ interface RequestFormProps {
     employmentType: string;
     positionDuration: string;
     newEmployeeName: string | null;
-    startDate: string | null;
     replacedPerson: string | null;
     notes: string | null;
-    submittedBy: string | null;
     status: string;
   };
 }
 
 const EMPTY_SELECT_VALUE = "__none__";
 
-export function RequestForm({ mode, initialData }: RequestFormProps) {
+export function RequestForm({ mode, initialData, defaultBuildingId }: RequestFormProps) {
   const router = useRouter();
-  const { options, isLoading: optionsLoading } = useDropdownOptions();
+  const { options, isLoading: optionsLoading, refetch } = useDropdownOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     positionId: initialData?.positionId ?? "",
-    locationId: initialData?.locationId ?? "",
+    locationId: initialData?.locationId ?? (mode === "create" && defaultBuildingId ? defaultBuildingId : ""),
     fundLineId: initialData?.fundLineId ?? "",
     requestType: initialData?.requestType ?? "",
     employmentType: initialData?.employmentType ?? "",
     positionDuration: initialData?.positionDuration ?? "",
     newEmployeeName: initialData?.newEmployeeName ?? "",
-    startDate: initialData?.startDate ?? "",
     replacedPerson: initialData?.replacedPerson ?? "",
     notes: initialData?.notes ?? "",
-    submittedBy: initialData?.submittedBy ?? "",
   });
 
   function handleChange(field: string, value: string) {
@@ -140,22 +138,42 @@ export function RequestForm({ mode, initialData }: RequestFormProps) {
               {/* Position */}
               <div className="space-y-2">
                 <Label>Position</Label>
-                <Select
-                  value={formData.positionId || EMPTY_SELECT_VALUE}
+                <Combobox
+                  options={(options.position ?? []).map((opt) => ({ id: opt.id, label: opt.label }))}
+                  value={formData.positionId}
                   onValueChange={(v) => handleChange("positionId", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select position" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_SELECT_VALUE}>-- Select --</SelectItem>
-                    {(options.position ?? []).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Select position"
+                  onAddNew={async (label) => {
+                    let categoryId: string | undefined = options.position?.[0]?.categoryId;
+                    if (!categoryId) {
+                      const catRes = await fetch("/api/dropdowns");
+                      const catJson = await catRes.json();
+                      const posCat = (catJson.data as { id: string; name: string }[]).find(
+                        (c) => c.name === "position"
+                      );
+                      categoryId = posCat?.id;
+                    }
+                    if (!categoryId) return null;
+                    const res = await fetch("/api/dropdowns/options/suggest", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ categoryId, label }),
+                    });
+                    if (!res.ok) {
+                      const json = await res.json();
+                      toast({
+                        title: "Error",
+                        description: json.error || "Failed to add position",
+                        variant: "destructive",
+                      });
+                      return null;
+                    }
+                    const json = await res.json();
+                    await refetch();
+                    return json.data.id;
+                  }}
+                  addNewLabel="Add new position..."
+                />
               </div>
 
               {/* Location */}
@@ -203,73 +221,76 @@ export function RequestForm({ mode, initialData }: RequestFormProps) {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Request Type */}
-              <div className="space-y-2">
-                <Label>
-                  New / Replacement <span className="text-destructive">*</span>
+              <fieldset className="space-y-2">
+                <Label asChild>
+                  <legend>
+                    New / Replacement <span className="text-destructive">*</span>
+                  </legend>
                 </Label>
-                <Select
-                  value={formData.requestType || EMPTY_SELECT_VALUE}
-                  onValueChange={(v) => handleChange("requestType", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_SELECT_VALUE}>-- Select --</SelectItem>
-                    {Object.entries(REQUEST_TYPE_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="flex gap-4 pt-1">
+                  {Object.entries(REQUEST_TYPE_LABELS).map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="requestType"
+                        value={value}
+                        checked={formData.requestType === value}
+                        onChange={(e) => handleChange("requestType", e.target.value)}
+                        className="h-4 w-4 border-gray-300 text-primary focus:ring-ring"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               {/* Employment Type */}
-              <div className="space-y-2">
-                <Label>
-                  Full or Part Time <span className="text-destructive">*</span>
+              <fieldset className="space-y-2">
+                <Label asChild>
+                  <legend>
+                    Full or Part Time <span className="text-destructive">*</span>
+                  </legend>
                 </Label>
-                <Select
-                  value={formData.employmentType || EMPTY_SELECT_VALUE}
-                  onValueChange={(v) => handleChange("employmentType", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_SELECT_VALUE}>-- Select --</SelectItem>
-                    {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="flex gap-4 pt-1">
+                  {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="employmentType"
+                        value={value}
+                        checked={formData.employmentType === value}
+                        onChange={(e) => handleChange("employmentType", e.target.value)}
+                        className="h-4 w-4 border-gray-300 text-primary focus:ring-ring"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               {/* Position Duration */}
-              <div className="space-y-2">
-                <Label>
-                  Temporary or Regular <span className="text-destructive">*</span>
+              <fieldset className="space-y-2">
+                <Label asChild>
+                  <legend>
+                    Temporary or Regular <span className="text-destructive">*</span>
+                  </legend>
                 </Label>
-                <Select
-                  value={formData.positionDuration || EMPTY_SELECT_VALUE}
-                  onValueChange={(v) => handleChange("positionDuration", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_SELECT_VALUE}>-- Select --</SelectItem>
-                    {Object.entries(POSITION_DURATION_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="flex gap-4 pt-1">
+                  {Object.entries(POSITION_DURATION_LABELS).map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="positionDuration"
+                        value={value}
+                        checked={formData.positionDuration === value}
+                        onChange={(e) => handleChange("positionDuration", e.target.value)}
+                        className="h-4 w-4 border-gray-300 text-primary focus:ring-ring"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             </div>
           </CardContent>
         </Card>
@@ -291,41 +312,14 @@ export function RequestForm({ mode, initialData }: RequestFormProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date</Label>
+                <Label htmlFor="replacedPerson">Person Being Replaced (when applicable)</Label>
                 <Input
-                  id="startDate"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => handleChange("startDate", e.target.value)}
+                  id="replacedPerson"
+                  value={formData.replacedPerson}
+                  onChange={(e) => handleChange("replacedPerson", e.target.value)}
+                  placeholder="e.g., Crystal Branigan - tsf to DABM eff"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="replacedPerson">Person Being Replaced (when applicable)</Label>
-              <Input
-                id="replacedPerson"
-                value={formData.replacedPerson}
-                onChange={(e) => handleChange("replacedPerson", e.target.value)}
-                placeholder="e.g., Crystal Branigan - tsf to DABM eff"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Submitter & Notes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Additional Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="submittedBy">Submitted By</Label>
-              <Input
-                id="submittedBy"
-                value={formData.submittedBy}
-                onChange={(e) => handleChange("submittedBy", e.target.value)}
-                placeholder="Your name"
-              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>

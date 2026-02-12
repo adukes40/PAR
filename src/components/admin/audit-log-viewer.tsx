@@ -63,13 +63,13 @@ const ACTIONS = [
 ];
 
 const ACTION_COLORS: Record<string, string> = {
-  CREATED: "bg-blue-100 text-blue-800",
-  UPDATED: "bg-yellow-100 text-yellow-800",
-  DELETED: "bg-red-100 text-red-800",
-  SUBMITTED: "bg-purple-100 text-purple-800",
-  APPROVED: "bg-green-100 text-green-800",
-  KICKED_BACK: "bg-red-100 text-red-800",
-  RESUBMITTED: "bg-purple-100 text-purple-800",
+  CREATED: "bg-sky-50 text-sky-800",
+  UPDATED: "bg-amber-50 text-amber-800",
+  DELETED: "bg-red-50 text-red-800",
+  SUBMITTED: "bg-violet-50 text-violet-800",
+  APPROVED: "bg-emerald-50 text-emerald-800",
+  KICKED_BACK: "bg-red-50 text-red-800",
+  RESUBMITTED: "bg-violet-50 text-violet-800",
 };
 
 export function AuditLogViewer() {

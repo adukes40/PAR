@@ -117,3 +117,68 @@ export async function getApprovalQueue(approverId: string) {
     return cp?.id === step.id;
   });
 }
+
+/**
+ * Get all requests currently pending approval with their full approval chains.
+ */
+export async function getAllPendingRequests() {
+  return prisma.parRequest.findMany({
+    where: { status: REQUEST_STATUS.PENDING_APPROVAL },
+    include: {
+      position: true,
+      location: true,
+      approvalSteps: {
+        include: { approver: true },
+        orderBy: { stepOrder: "asc" },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
+ * Reopen an approved request — resets all approval steps to PENDING
+ * and puts the request back at the start of the approval chain.
+ */
+export async function reopenRequest(requestId: string, reopenedBy?: string) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.parRequest.findUnique({
+      where: { id: requestId },
+      include: { approvalSteps: true },
+    });
+    if (!request) throw new Error("Request not found");
+    if (request.status !== REQUEST_STATUS.APPROVED) {
+      throw new Error("Only approved requests can be reopened");
+    }
+    if (request.approvalSteps.length === 0) {
+      throw new Error("No approval steps found to reopen");
+    }
+
+    // Reset all approval steps to PENDING
+    await tx.approvalStep.updateMany({
+      where: { requestId },
+      data: {
+        status: APPROVAL_STATUS.PENDING,
+        approvedBy: null,
+        approvedAt: null,
+        kickBackToStep: null,
+        kickBackReason: null,
+      },
+    });
+
+    const updated = await tx.parRequest.update({
+      where: { id: requestId },
+      data: { status: REQUEST_STATUS.PENDING_APPROVAL },
+    });
+
+    await createAuditLogInTx(tx, {
+      entityType: AUDIT_ENTITY_TYPE.PAR_REQUEST,
+      entityId: requestId,
+      action: AUDIT_ACTION.UPDATED,
+      changedBy: reopenedBy,
+      metadata: { action: "reopened", previousStatus: request.status },
+    });
+
+    return updated;
+  });
+}

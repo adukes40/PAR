@@ -1,17 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -20,120 +11,76 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { StatusBadge } from "@/components/requests/status-badge";
-import { Label } from "@/components/ui/label";
-import { Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Eye, CheckCircle, Clock, Circle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Approver {
   id: string;
   name: string;
   title: string;
-  isActive: boolean;
-  delegates: { id: string; delegateName: string; isActive: boolean }[];
+  email: string | null;
+  delegates: { id: string; delegateName: string; delegateEmail: string | null; isActive: boolean }[];
 }
 
-interface QueueItem {
+interface PendingRequest {
   id: string;
-  stepOrder: number;
-  request: {
+  jobId: string;
+  submittedBy: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  position: { label: string } | null;
+  location: { label: string } | null;
+  approvalSteps: {
     id: string;
-    jobId: string;
+    stepOrder: number;
     status: string;
-    createdAt: string;
-    submittedBy: string | null;
-    position: { label: string } | null;
-    location: { label: string } | null;
-    fundLine: { label: string } | null;
-    approvalSteps: {
-      id: string;
-      stepOrder: number;
-      status: string;
-      approver: { name: string };
-    }[];
-  };
+    approvedBy: string | null;
+    approvedAt: string | null;
+    approver: { id: string; name: string; title: string };
+  }[];
 }
 
-interface ApprovalQueueProps {
+interface ApprovalDashboardProps {
   approvers: Approver[];
+  pendingRequests: PendingRequest[];
+  myApproverIds: string[];
 }
 
-const EMPTY_SELECT_VALUE = "__none__";
+function getCurrentStep(request: PendingRequest) {
+  return request.approvalSteps
+    .filter((s) => s.status === "PENDING")
+    .sort((a, b) => a.stepOrder - b.stepOrder)[0] ?? null;
+}
 
-export function ApprovalQueue({ approvers }: ApprovalQueueProps) {
-  const [selectedApprover, setSelectedApprover] = useState(EMPTY_SELECT_VALUE);
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [loading, setLoading] = useState(false);
+export function ApprovalDashboard({ approvers, pendingRequests, myApproverIds }: ApprovalDashboardProps) {
+  const requestsWithStep = pendingRequests.map((req) => ({
+    ...req,
+    currentStep: getCurrentStep(req),
+  }));
 
-  const activeApprovers = approvers.filter((a) => a.isActive);
+  // My queue: requests where the current pending step is for one of my approver IDs
+  const myQueue = requestsWithStep.filter(
+    (r) => r.currentStep && myApproverIds.includes(r.currentStep.approver.id)
+  );
 
-  const fetchQueue = useCallback(async (approverId: string) => {
-    if (approverId === EMPTY_SELECT_VALUE) {
-      setQueue([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/approvals/queue?approverId=${approverId}`);
-      const data = await res.json();
-      if (data.data) setQueue(data.data);
-    } catch {
-      setQueue([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchQueue(selectedApprover);
-  }, [selectedApprover, fetchQueue]);
+  const hasApproverRole = myApproverIds.length > 0;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Who are you?</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="max-w-sm space-y-2">
-            <Label>Select your approver identity</Label>
-            <Select value={selectedApprover} onValueChange={setSelectedApprover}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select an approver" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={EMPTY_SELECT_VALUE}>-- Select --</SelectItem>
-                {activeApprovers.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} — {a.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedApprover !== EMPTY_SELECT_VALUE && (() => {
-              const approver = activeApprovers.find((a) => a.id === selectedApprover);
-              const activeDelegates = approver?.delegates.filter((d) => d.isActive) ?? [];
-              if (activeDelegates.length === 0) return null;
-              return (
-                <p className="text-xs text-muted-foreground">
-                  Delegates: {activeDelegates.map((d) => d.delegateName).join(", ")}
-                </p>
-              );
-            })()}
-          </div>
-        </CardContent>
-      </Card>
-
-      {selectedApprover !== EMPTY_SELECT_VALUE && (
+    <div className="space-y-8">
+      {/* My Pending Approvals */}
+      {hasApproverRole && (
         <Card>
           <CardHeader>
             <CardTitle>
-              Pending Approvals {!loading && `(${queue.length})`}
+              Your Pending Approvals{" "}
+              <span className="text-muted-foreground font-normal text-sm">
+                ({myQueue.length})
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : queue.length === 0 ? (
+            {myQueue.length === 0 ? (
               <p className="text-sm text-muted-foreground">No requests awaiting your approval.</p>
             ) : (
               <Table>
@@ -145,26 +92,28 @@ export function ApprovalQueue({ approvers }: ApprovalQueueProps) {
                     <TableHead>Submitted By</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead>Step</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {queue.map((item) => (
+                  {myQueue.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.request.jobId}</TableCell>
-                      <TableCell>{item.request.position?.label ?? "—"}</TableCell>
-                      <TableCell>{item.request.location?.label ?? "—"}</TableCell>
-                      <TableCell>{item.request.submittedBy ?? "—"}</TableCell>
-                      <TableCell>{format(new Date(item.request.createdAt), "MMM d, yyyy")}</TableCell>
-                      <TableCell>
-                        {item.stepOrder} of {item.request.approvalSteps.length}
+                      <TableCell className="font-medium">
+                        <Link href={`/requests/${item.id}`} className="text-primary hover:underline">
+                          {item.jobId}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{item.position?.label ?? "—"}</TableCell>
+                      <TableCell>{item.location?.label ?? "—"}</TableCell>
+                      <TableCell>{item.submittedBy ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {format(new Date(item.submittedAt || item.createdAt), "MMM d, yyyy")}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={item.request.status} />
+                        {item.currentStep?.stepOrder} of {item.approvalSteps.length}
                       </TableCell>
                       <TableCell>
-                        <Link href={`/requests/${item.request.id}`}>
+                        <Link href={`/requests/${item.id}`}>
                           <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -178,6 +127,86 @@ export function ApprovalQueue({ approvers }: ApprovalQueueProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Approval Overview — all pending requests with chain progress */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Approval Overview{" "}
+            <span className="text-muted-foreground font-normal text-sm">
+              ({requestsWithStep.length})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {requestsWithStep.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No requests pending approval.</p>
+          ) : (
+            <div className="space-y-4">
+              {requestsWithStep.map((req) => (
+                <div key={req.id} className="rounded-lg border p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link
+                        href={`/requests/${req.id}`}
+                        className="font-medium text-primary hover:underline shrink-0"
+                      >
+                        {req.jobId}
+                      </Link>
+                      <span className="text-muted-foreground text-sm truncate">
+                        {req.position?.label ?? ""}
+                        {req.submittedBy ? ` — ${req.submittedBy}` : ""}
+                      </span>
+                    </div>
+                    <Link href={`/requests/${req.id}`}>
+                      <Button variant="outline" size="sm" className="shrink-0 ml-2">
+                        <Eye className="mr-2 h-4 w-4" />
+                        View
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {/* Approval chain progress */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {req.approvalSteps.map((step, idx) => {
+                      const isCurrent = step.id === req.currentStep?.id;
+                      return (
+                        <div key={step.id} className="flex items-center">
+                          {idx > 0 && <div className="w-5 h-px bg-border" />}
+                          <div
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                              step.status === "APPROVED"
+                                ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300"
+                                : isCurrent
+                                  ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300"
+                                  : "bg-muted text-muted-foreground"
+                            )}
+                            title={
+                              step.status === "APPROVED"
+                                ? `${step.approver.name} — Approved by ${step.approvedBy}`
+                                : `${step.approver.name} — ${isCurrent ? "Current" : "Waiting"}`
+                            }
+                          >
+                            {step.status === "APPROVED" ? (
+                              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                            ) : isCurrent ? (
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <Circle className="h-3.5 w-3.5 shrink-0" />
+                            )}
+                            {step.approver.name}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

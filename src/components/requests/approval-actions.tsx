@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { REQUEST_STATUS } from "@/lib/constants";
-import { Send, CheckCircle, Undo2 } from "lucide-react";
+import { Send, CheckCircle, Undo2, RotateCcw } from "lucide-react";
 
 interface ApprovalStep {
   id: string;
@@ -66,6 +66,9 @@ export function ApprovalActions({ requestId, requestStatus, approvalSteps }: App
   const [kickBackToStep, setKickBackToStep] = useState("");
   const [kickBackReason, setKickBackReason] = useState("");
 
+  // Reopen dialog state
+  const [reopenOpen, setReopenOpen] = useState(false);
+
   // Approver selection for approve/kick-back
   const [approvers, setApprovers] = useState<{ id: string; name: string; title: string; delegates: { delegateName: string; isActive: boolean }[] }[]>([]);
 
@@ -84,6 +87,7 @@ export function ApprovalActions({ requestId, requestStatus, approvalSteps }: App
 
   const canSubmit = requestStatus === REQUEST_STATUS.DRAFT || requestStatus === REQUEST_STATUS.KICKED_BACK;
   const canApprove = requestStatus === REQUEST_STATUS.PENDING_APPROVAL && currentPendingStep;
+  const canReopen = requestStatus === REQUEST_STATUS.APPROVED;
 
   async function handleSubmit() {
     if (!submitterName.trim()) return;
@@ -126,6 +130,26 @@ export function ApprovalActions({ requestId, requestStatus, approvalSteps }: App
       if (!res.ok) throw new Error(data.error || "Failed to approve");
       setApproveOpen(false);
       setApproveIdentity("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleReopen() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/${requestId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reopen" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reopen");
+      setReopenOpen(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -179,7 +203,7 @@ export function ApprovalActions({ requestId, requestStatus, approvalSteps }: App
     .filter((s) => currentPendingStep && s.stepOrder <= currentPendingStep.stepOrder)
     .sort((a, b) => a.stepOrder - b.stepOrder);
 
-  if (!canSubmit && !canApprove) return null;
+  if (!canSubmit && !canApprove && !canReopen) return null;
 
   return (
     <Card>
@@ -348,6 +372,34 @@ export function ApprovalActions({ requestId, requestStatus, approvalSteps }: App
               </DialogContent>
             </Dialog>
           </>
+        )}
+
+        {canReopen && (
+          <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full" variant="outline">
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reopen Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reopen Request</DialogTitle>
+                <DialogDescription>
+                  This will reset all approvals and send the request back to the start of the approval chain.
+                  All approvers will need to re-approve.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReopenOpen(false)} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button onClick={handleReopen} disabled={loading}>
+                  {loading ? "Reopening..." : "Reopen"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </CardContent>
     </Card>

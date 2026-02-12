@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listRequests, createRequest } from "@/lib/db/requests";
+import { requireAuth } from "@/lib/auth-helpers";
 
 const createRequestSchema = z.object({
   positionId: z.string().uuid().optional().or(z.literal("")),
@@ -13,11 +14,13 @@ const createRequestSchema = z.object({
   startDate: z.string().optional(),
   replacedPerson: z.string().max(255).optional(),
   notes: z.string().optional(),
-  submittedBy: z.string().max(255).optional(),
 });
 
 export async function GET(request: Request) {
   try {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
@@ -37,6 +40,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
     const body = await request.json();
     const parsed = createRequestSchema.safeParse(body);
 
@@ -55,7 +61,7 @@ export async function POST(request: Request) {
       fundLineId: parsed.data.fundLineId || undefined,
     };
 
-    const par = await createRequest(cleaned);
+    const par = await createRequest({ ...cleaned, submittedBy: session.user.name || session.user.email });
     return NextResponse.json({ data: par }, { status: 201 });
   } catch (error) {
     console.error("POST /api/requests error:", error);

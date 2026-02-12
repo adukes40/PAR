@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { updateOption, deactivateOption, reactivateOption } from "@/lib/db/dropdowns";
+import { requireHROrAdmin } from "@/lib/auth-helpers";
 
 const updateOptionSchema = z.object({
   label: z.string().min(1).max(255).optional(),
   value: z.string().min(1).max(255).optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
-  changedBy: z.string().max(255).optional(),
+  needsReview: z.boolean().optional(),
 });
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { session, error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const { id } = await params;
 
@@ -31,7 +35,8 @@ export async function PATCH(
       );
     }
 
-    const option = await updateOption(id, parsed.data);
+    const changedBy = session.user.name || session.user.email;
+    const option = await updateOption(id, { ...parsed.data, changedBy });
     return NextResponse.json({ data: option });
   } catch (error) {
     if (error instanceof Error) {
@@ -57,6 +62,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { error: authError } = await requireHROrAdmin();
+  if (authError) return authError;
+
   try {
     const { id } = await params;
 

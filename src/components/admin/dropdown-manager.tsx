@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, RotateCcw, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Pencil, Trash2, RotateCcw, GripVertical, ListPlus, CheckCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface DropdownOption {
@@ -34,6 +35,7 @@ interface DropdownOption {
   value: string;
   sortOrder: number;
   isActive: boolean;
+  needsReview: boolean;
   categoryId: string;
 }
 
@@ -55,9 +57,17 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
   );
   const [isAddingOption, setIsAddingOption] = useState(false);
   const [newOptionLabel, setNewOptionLabel] = useState("");
+  const [isBulkAdding, setIsBulkAdding] = useState(false);
+  const [bulkText, setBulkText] = useState("");
   const [editingOption, setEditingOption] = useState<DropdownOption | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reactivatePrompt, setReactivatePrompt] = useState<DropdownOption | null>(null);
+
+  // Drag-and-drop state
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const currentCategory = categories.find((c) => c.id === selectedCategory);
 
@@ -72,6 +82,17 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
   async function handleAddOption() {
     if (!newOptionLabel.trim() || !selectedCategory) return;
 
+    // Check if label matches an inactive option (case-insensitive)
+    const inactiveMatch = currentCategory?.options.find(
+      (o) => !o.isActive && o.label.toLowerCase() === newOptionLabel.trim().toLowerCase()
+    );
+    if (inactiveMatch) {
+      setIsAddingOption(false);
+      setNewOptionLabel("");
+      setReactivatePrompt(inactiveMatch);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/dropdowns/options", {
@@ -85,6 +106,23 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
 
       if (!res.ok) {
         const json = await res.json();
+
+        // API detected an inactive duplicate — show reactivate prompt
+        if (json.code === "INACTIVE_DUPLICATE" && json.inactiveOption) {
+          setIsAddingOption(false);
+          setNewOptionLabel("");
+          setReactivatePrompt({
+            id: json.inactiveOption.id,
+            label: json.inactiveOption.label,
+            value: "",
+            sortOrder: 0,
+            isActive: false,
+            needsReview: false,
+            categoryId: selectedCategory,
+          });
+          return;
+        }
+
         throw new Error(json.error || "Failed to add option");
       }
 
@@ -96,6 +134,52 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to add option",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleBulkAdd() {
+    if (!bulkText.trim() || !selectedCategory) return;
+
+    const labels = bulkText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (labels.length === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/dropdowns/options/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId: selectedCategory, labels }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Failed to add options");
+      }
+
+      const json = await res.json();
+      const { created, skipped, skippedLabels } = json.data;
+
+      let description = `${created} option${created !== 1 ? "s" : ""} added.`;
+      if (skipped > 0) {
+        description += ` ${skipped} skipped (already exist): ${skippedLabels.join(", ")}`;
+      }
+
+      toast({ title: "Bulk add complete", description });
+      setBulkText("");
+      setIsBulkAdding(false);
+      await refreshCategories();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add options",
         variant: "destructive",
       });
     } finally {
@@ -178,24 +262,46 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
     }
   }
 
-  async function handleMoveOption(option: DropdownOption, direction: "up" | "down") {
-    if (!currentCategory) return;
+  async function handleApproveOption(option: DropdownOption) {
+    try {
+      const res = await fetch(`/api/dropdowns/options/${option.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ needsReview: false }),
+      });
 
-    const sortedOptions = [...currentCategory.options].sort(
-      (a, b) => a.sortOrder - b.sortOrder
-    );
-    const currentIndex = sortedOptions.findIndex((o) => o.id === option.id);
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Failed to approve option");
+      }
 
-    if (
-      (direction === "up" && currentIndex === 0) ||
-      (direction === "down" && currentIndex === sortedOptions.length - 1)
-    ) {
-      return;
+      toast({ title: "Option approved", description: `"${option.label}" has been reviewed.` });
+      await refreshCategories();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to approve option",
+        variant: "destructive",
+      });
     }
+  }
 
-    const newOrder = sortedOptions.map((o) => o.id);
-    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    [newOrder[currentIndex], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[currentIndex]];
+  const handleDragEnd = useCallback(async () => {
+    const from = dragItem.current;
+    const to = dragOverItem.current;
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setDragIndex(null);
+
+    if (from === null || to === null || from === to || !currentCategory) return;
+
+    const sorted = [...currentCategory.options]
+      .filter((o) => o.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const newOrder = sorted.map((o) => o.id);
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(to, 0, moved);
 
     try {
       const res = await fetch("/api/dropdowns/reorder", {
@@ -220,7 +326,7 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
         variant: "destructive",
       });
     }
-  }
+  }, [currentCategory, selectedCategory]);
 
   const activeOptions = currentCategory?.options
     .filter((o) => o.isActive)
@@ -254,6 +360,54 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
         <div className="rounded-lg border bg-card">
           <div className="flex items-center justify-between border-b p-4">
             <h3 className="font-semibold">{currentCategory.label} Options</h3>
+            <div className="flex gap-2">
+            <Dialog open={isBulkAdding} onOpenChange={setIsBulkAdding}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <ListPlus className="mr-2 h-4 w-4" />
+                  Bulk Add
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Bulk Add {currentCategory.label} Options</DialogTitle>
+                  <DialogDescription>
+                    Enter one option per line. Duplicates will be skipped.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bulkLabels">Options (one per line)</Label>
+                    <Textarea
+                      id="bulkLabels"
+                      value={bulkText}
+                      onChange={(e) => setBulkText(e.target.value)}
+                      placeholder={`Enter ${currentCategory.label.toLowerCase()} names, one per line...\nExample Option 1\nExample Option 2\nExample Option 3`}
+                      rows={10}
+                    />
+                    {bulkText.trim() && (
+                      <p className="text-xs text-muted-foreground">
+                        {bulkText.split("\n").filter((l) => l.trim()).length} option(s) to add
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsBulkAdding(false);
+                      setBulkText("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleBulkAdd} disabled={isSubmitting || !bulkText.trim()}>
+                    {isSubmitting ? "Adding..." : "Add All"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Dialog open={isAddingOption} onOpenChange={setIsAddingOption}>
               <DialogTrigger asChild>
                 <Button size="sm">
@@ -298,6 +452,7 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
 
           {/* Active Options */}
@@ -310,32 +465,41 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
             {activeOptions.map((option, index) => (
               <div
                 key={option.id}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
+                draggable
+                onDragStart={() => {
+                  dragItem.current = index;
+                  setDragIndex(index);
+                }}
+                onDragEnter={() => {
+                  dragOverItem.current = index;
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnd={handleDragEnd}
+                className={
+                  "flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors" +
+                  (dragIndex === index ? " opacity-50" : "")
+                }
               >
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
                 <span className="flex-1 text-sm">{option.label}</span>
-                <span className="text-xs text-muted-foreground font-mono">{option.value}</span>
+                {option.needsReview && (
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-xs">
+                      Needs Review
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-green-700 hover:text-green-800 hover:bg-green-50"
+                      onClick={() => handleApproveOption(option)}
+                    >
+                      <CheckCircle className="mr-1 h-3 w-3" />
+                      Approve
+                    </Button>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handleMoveOption(option, "up")}
-                    disabled={index === 0}
-                  >
-                    <ArrowUp className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handleMoveOption(option, "down")}
-                    disabled={index === activeOptions.length - 1}
-                  >
-                    <ArrowDown className="h-3 w-3" />
-                  </Button>
-
                   {/* Edit */}
                   <Dialog
                     open={editingOption?.id === option.id}
@@ -455,6 +619,37 @@ export function DropdownManager({ categories: initialCategories }: DropdownManag
           )}
         </div>
       )}
+
+      {/* Reactivate Prompt */}
+      <AlertDialog
+        open={reactivatePrompt !== null}
+        onOpenChange={(open) => { if (!open) setReactivatePrompt(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reactivate Option</AlertDialogTitle>
+            <AlertDialogDescription>
+              That field already exists, but is deactivated. Would you like to reactivate
+              the field &quot;{reactivatePrompt?.label}&quot;?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setReactivatePrompt(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (reactivatePrompt) {
+                  handleReactivate(reactivatePrompt);
+                  setReactivatePrompt(null);
+                }
+              }}
+            >
+              Reactivate Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

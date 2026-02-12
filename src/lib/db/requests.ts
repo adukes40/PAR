@@ -45,7 +45,7 @@ export async function listRequests(params?: {
   limit?: number;
 }) {
   const page = params?.page ?? 1;
-  const limit = Math.min(params?.limit ?? 25, 100);
+  const limit = Math.min(params?.limit ?? 25, 5000);
   const skip = (page - 1) * limit;
 
   const where: Prisma.ParRequestWhereInput = {};
@@ -208,6 +208,34 @@ export async function updateRequest(
       changes,
     });
   }
+
+  return updated;
+}
+
+/**
+ * Cancel an open request.
+ */
+export async function cancelRequest(id: string, cancelledBy?: string) {
+  const existing = await prisma.parRequest.findUnique({ where: { id } });
+  if (!existing) throw new Error("Request not found");
+
+  if (existing.status !== "DRAFT" && existing.status !== "PENDING_APPROVAL") {
+    throw new Error("Only open requests can be cancelled");
+  }
+
+  const updated = await prisma.parRequest.update({
+    where: { id },
+    data: { status: "CANCELLED" },
+    include: requestInclude,
+  });
+
+  await createAuditLog({
+    entityType: AUDIT_ENTITY_TYPE.PAR_REQUEST,
+    entityId: id,
+    action: AUDIT_ACTION.UPDATED,
+    changedBy: cancelledBy,
+    metadata: { action: "cancelled", previousStatus: existing.status },
+  });
 
   return updated;
 }

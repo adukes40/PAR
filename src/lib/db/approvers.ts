@@ -147,7 +147,7 @@ export async function reorderApprovers(approverIds: string[], changedBy?: string
 
   await createAuditLog({
     entityType: AUDIT_ENTITY_TYPE.APPROVER,
-    entityId: "reorder",
+    entityId: approverIds[0],
     action: AUDIT_ACTION.UPDATED,
     changedBy,
     metadata: { action: "reorder", newOrder: approverIds },

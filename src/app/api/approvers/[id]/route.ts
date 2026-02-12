@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { updateApprover, deactivateApprover } from "@/lib/db/approvers";
+import { requireHROrAdmin } from "@/lib/auth-helpers";
 
 const updateApproverSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -8,13 +9,15 @@ const updateApproverSchema = z.object({
   email: z.string().email("Invalid email").max(255).optional().or(z.literal("")),
   sortOrder: z.number().int().min(1).optional(),
   isActive: z.boolean().optional(),
-  changedBy: z.string().max(255).optional(),
 });
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { session, error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const { id } = await params;
 
@@ -32,7 +35,8 @@ export async function PATCH(
       );
     }
 
-    const approver = await updateApprover(id, parsed.data);
+    const changedBy = session.user.name || session.user.email;
+    const approver = await updateApprover(id, { ...parsed.data, changedBy });
     return NextResponse.json({ data: approver });
   } catch (error) {
     if (error instanceof Error && error.message === "Approver not found") {
@@ -50,6 +54,9 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { session, error } = await requireHROrAdmin();
+  if (error) return error;
+
   try {
     const { id } = await params;
 
@@ -57,7 +64,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid approver ID" }, { status: 400 });
     }
 
-    const approver = await deactivateApprover(id);
+    const changedBy = session.user.name || session.user.email;
+    const approver = await deactivateApprover(id, changedBy);
     return NextResponse.json({ data: approver });
   } catch (error) {
     if (error instanceof Error && error.message === "Approver not found") {

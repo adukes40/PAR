@@ -124,9 +124,9 @@ export default async function RequestDetailPage({
                         <div
                           className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
                             step.status === "APPROVED"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-emerald-600 text-white"
                               : step.status === "KICKED_BACK"
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-red-600 text-white"
                                 : "bg-muted text-muted-foreground"
                           }`}
                         >
@@ -140,7 +140,7 @@ export default async function RequestDetailPage({
                         <p className="text-sm font-medium">{step.approver.name}</p>
                         <p className="text-xs text-muted-foreground">{step.approver.title}</p>
                         {step.status === "APPROVED" && step.approvedAt && (
-                          <p className="text-xs text-green-700 mt-1">
+                          <p className="text-xs text-emerald-800 font-medium mt-1">
                             Approved by {step.approvedBy} on{" "}
                             {format(new Date(step.approvedAt), "MMM d, yyyy h:mm a")}
                           </p>
