@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowUp, ArrowDown, ArrowUpDown, Search, Ban } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Search, Ban, Filter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/requests/status-badge";
@@ -250,11 +250,48 @@ function RequestTable({
 
 interface RequestListProps {
   requests: RequestRow[];
+  initialStatusFilter?: string;
 }
 
 const OPEN_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL"]);
 
-export function RequestList({ requests }: RequestListProps) {
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  DRAFT: "Drafts",
+  PENDING_APPROVAL: "Pending Approval",
+  APPROVED: "Approved",
+  KICKED_BACK: "Kicked Back",
+  CANCELLED: "Cancelled",
+};
+
+export function RequestList({ requests, initialStatusFilter }: RequestListProps) {
+  if (initialStatusFilter) {
+    const filtered = requests.filter((r) => r.status === initialStatusFilter);
+    const label = STATUS_FILTER_LABELS[initialStatusFilter] ?? initialStatusFilter;
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+          <Filter className="h-4 w-4 text-blue-600 shrink-0" />
+          <span className="text-blue-800">
+            Showing <strong>{label}</strong> requests only.
+          </span>
+          <Link
+            href="/requests"
+            className="ml-auto inline-flex items-center gap-1 rounded-md bg-white border px-3 py-1 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            <X className="h-3 w-3" />
+            Show All
+          </Link>
+        </div>
+        <RequestTable
+          title={label}
+          requests={filtered}
+          emptyMessage={`No ${label.toLowerCase()} requests.`}
+          showCancel={OPEN_STATUSES.has(initialStatusFilter)}
+        />
+      </div>
+    );
+  }
+
   const openRequests = requests.filter((r) => OPEN_STATUSES.has(r.status));
   const closedRequests = requests.filter((r) => !OPEN_STATUSES.has(r.status));
 

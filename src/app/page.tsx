@@ -30,6 +30,7 @@ export default async function DashboardPage() {
       borderColor: "border-l-muted-foreground",
       bgColor: "bg-muted/50",
       iconColor: "text-muted-foreground",
+      href: "/requests?status=DRAFT",
     },
     {
       label: "Pending Approval",
@@ -38,6 +39,7 @@ export default async function DashboardPage() {
       borderColor: "border-l-amber-500",
       bgColor: "bg-amber-50",
       iconColor: "text-amber-600",
+      href: "/requests?status=PENDING_APPROVAL",
     },
     {
       label: "Approved (30d)",
@@ -46,6 +48,7 @@ export default async function DashboardPage() {
       borderColor: "border-l-emerald-500",
       bgColor: "bg-emerald-50",
       iconColor: "text-emerald-600",
+      href: "/requests?status=APPROVED",
     },
     {
       label: "Kicked Back",
@@ -54,6 +57,7 @@ export default async function DashboardPage() {
       borderColor: "border-l-red-500",
       bgColor: "bg-red-50",
       iconColor: "text-red-600",
+      href: "/requests?status=KICKED_BACK",
     },
   ];
 
@@ -63,22 +67,23 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {summaryCards.map((card) => (
-          <Card
-            key={card.label}
-            className={`border-l-4 ${card.borderColor} ${card.bgColor}`}
-          >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {card.label}
-                  </p>
-                  <p className="text-3xl font-bold mt-1">{card.count}</p>
+          <Link key={card.label} href={card.href}>
+            <Card
+              className={`border-l-4 ${card.borderColor} ${card.bgColor} transition-shadow hover:shadow-md cursor-pointer`}
+            >
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {card.label}
+                    </p>
+                    <p className="text-3xl font-bold mt-1">{card.count}</p>
+                  </div>
+                  <card.icon className={`h-8 w-8 ${card.iconColor}`} />
                 </div>
-                <card.icon className={`h-8 w-8 ${card.iconColor}`} />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 

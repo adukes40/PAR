@@ -9,11 +9,17 @@ import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function RequestsPage() {
+export default async function RequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) {
     redirect("/auth/signin");
   }
+
+  const { status: statusFilter } = await searchParams;
 
   const user = session.user as { email: string; name?: string | null; role: string };
   const isAdminOrHR = user.role === "ADMIN" || user.role === "HR";
@@ -52,7 +58,7 @@ export default async function RequestsPage() {
         </Link>
       </PageHeader>
 
-      <RequestList requests={requests} />
+      <RequestList requests={requests} initialStatusFilter={statusFilter} />
     </div>
   );
 }
