@@ -23,15 +23,33 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 install_packages() {
   echo "Installing system packages..."
   if [ "$PKG" = "apt" ]; then
+    apt-get update -qq
+    apt-get install -y -qq ca-certificates curl gnupg lsb-release
+
+    mkdir -p /etc/apt/keyrings
+
     # Node.js 20 via NodeSource
     if ! command -v node &>/dev/null; then
-      apt-get update -qq
-      apt-get install -y -qq ca-certificates curl gnupg
-      mkdir -p /etc/apt/keyrings
       curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+        | gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg
       echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
         > /etc/apt/sources.list.d/nodesource.list
+    fi
+
+    # PostgreSQL 16 via PGDG
+    if [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
+      curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --batch --yes --dearmor -o /etc/apt/keyrings/postgresql.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list
+    fi
+
+    # Caddy via official repo
+    if [ ! -f /etc/apt/sources.list.d/caddy-stable.list ]; then
+      curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
+        | gpg --batch --yes --dearmor -o /etc/apt/keyrings/caddy.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" \
+        > /etc/apt/sources.list.d/caddy-stable.list
     fi
 
     apt-get update -qq
@@ -126,6 +144,13 @@ build_app() {
   # Compile seed script for production use
   npx tsc prisma/seed.ts --outDir prisma/dist --esModuleInterop --module commonjs --skipLibCheck
 
+  # Copy static assets into standalone dir (Next.js standalone doesn't include these)
+  cp -r "${APP_DIR}/.next/static" "${APP_DIR}/.next/standalone/.next/static"
+  cp -r "${APP_DIR}/public" "${APP_DIR}/.next/standalone/public"
+
+  # Symlink .env into standalone dir so Next.js can read it at runtime
+  ln -sf "${APP_DIR}/.env" "${APP_DIR}/.next/standalone/.env"
+
   echo "Build complete."
   echo ""
 }
@@ -165,6 +190,7 @@ User=par
 Group=par
 WorkingDirectory=${APP_DIR}/.next/standalone
 EnvironmentFile=${APP_DIR}/.env
+EnvironmentFile=-${APP_DIR}/data/.env.db-settings
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOSTNAME=0.0.0.0

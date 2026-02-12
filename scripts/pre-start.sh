@@ -2,6 +2,7 @@
 set -e
 
 APP_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+ENV_OVERRIDE="${APP_DIR}/data/.env.db-settings"
 
 # Load environment
 if [ -f "${APP_DIR}/.env" ]; then
@@ -23,5 +24,7 @@ if [ ! -f "${APP_DIR}/data/.seeded" ]; then
   echo "Seeding complete."
 fi
 
-# Load Google OAuth credentials from DB settings (overrides env if set)
-eval "$(node "${APP_DIR}/scripts/load-settings.js" 2>/dev/null || true)"
+# Load Google OAuth credentials from DB into a drop-in env file
+# so systemd passes them to the main app process
+node "${APP_DIR}/scripts/load-settings.js" 2>/dev/null \
+  | sed 's/^export //' > "${ENV_OVERRIDE}" || true

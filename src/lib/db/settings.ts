@@ -1,16 +1,22 @@
 import { prisma } from "@/lib/prisma";
 
-// In-memory cache to avoid DB hits on every auth request
+// In-memory cache with TTL to avoid stale reads across runtimes
 const settingsCache = new Map<string, string>();
-let cacheLoaded = false;
+let cacheLoadedAt = 0;
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+function isCacheValid() {
+  return cacheLoadedAt > 0 && Date.now() - cacheLoadedAt < CACHE_TTL_MS;
+}
 
 async function ensureCache() {
-  if (cacheLoaded) return;
+  if (isCacheValid()) return;
   const all = await prisma.appSetting.findMany();
+  settingsCache.clear();
   for (const s of all) {
     settingsCache.set(s.key, s.value);
   }
-  cacheLoaded = true;
+  cacheLoadedAt = Date.now();
 }
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -33,11 +39,12 @@ export async function upsertSetting(key: string, value: string): Promise<void> {
     update: { value },
     create: { key, value },
   });
-  // Invalidate cache so next read picks up the new value
+  // Update local cache immediately
   settingsCache.set(key, value);
+  cacheLoadedAt = Date.now();
 }
 
 export function invalidateSettingsCache() {
   settingsCache.clear();
-  cacheLoaded = false;
+  cacheLoadedAt = 0;
 }

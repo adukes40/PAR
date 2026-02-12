@@ -33,10 +33,11 @@ echo "Compiling seed script..."
 npx tsc prisma/seed.ts --outDir prisma/dist --esModuleInterop --module commonjs --skipLibCheck
 echo ""
 
-# Copy standalone static files
+# Copy standalone static files and symlink .env
 echo "Copying static assets..."
 cp -r "${APP_DIR}/public" "${APP_DIR}/.next/standalone/public" 2>/dev/null || true
 cp -r "${APP_DIR}/.next/static" "${APP_DIR}/.next/standalone/.next/static" 2>/dev/null || true
+ln -sf "${APP_DIR}/.env" "${APP_DIR}/.next/standalone/.env"
 echo ""
 
 # Restart app (pre-start.sh handles migrations automatically)

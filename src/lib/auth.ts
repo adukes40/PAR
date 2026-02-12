@@ -84,35 +84,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Dynamic import to avoid pulling googleapis into Edge runtime
         const { checkGroupMembership, mapGroupsToRole } = await import("@/lib/google-admin");
 
+        const { getSetting } = await import("@/lib/db/settings");
+        const keyJson = await getSetting("google_service_account_key");
+        const adminEmailSetting = await getSetting("google_admin_email");
+
+        // If Admin SDK is not configured yet, deny Google sign-ins.
+        // All users must be in a Google group to access PAR.
+        if (!keyJson || !adminEmailSetting) {
+          console.warn("Google Admin SDK not configured — denying Google sign-in (no group verification possible)");
+          return "/auth/signin?error=AccessDenied";
+        }
+
         const groups = await checkGroupMembership(user.email);
 
-        // If Admin SDK is not configured (groups check returned empty due to no credentials),
-        // check if credentials are actually configured before denying
         if (groups.length === 0) {
-          const { getSetting } = await import("@/lib/db/settings");
-          const keyJson = await getSetting("google_service_account_key");
-          const adminEmail = await getSetting("google_admin_email");
-
-          if (!keyJson || !adminEmail) {
-            // Admin SDK not configured yet — allow sign-in (graceful fallback)
-            console.warn("Google Admin SDK not configured, allowing sign-in without group check");
-            return true;
-          }
-
-          // Verify the key is actually valid JSON with required fields
-          try {
-            const parsed = JSON.parse(keyJson);
-            if (!parsed.client_email || !parsed.private_key) {
-              console.warn("Google service account key missing client_email or private_key, allowing sign-in");
-              return true;
-            }
-          } catch {
-            console.warn("Google service account key is not valid JSON, allowing sign-in");
-            return true;
-          }
-
-          // Admin SDK is configured but user is not in any group — deny
-          return false;
+          // User is not in any PAR Google group — deny access
+          console.warn(`User ${user.email} is not a member of any PAR Google group — access denied`);
+          return "/auth/signin?error=AccessDenied";
         }
 
         // Update role in DB based on group membership
@@ -125,8 +113,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       } catch (err) {
         console.error("Error in signIn callback:", err);
-        // On error, allow sign-in to avoid locking out all users
-        return true;
+        // On error, deny sign-in rather than granting unauthorized access
+        return "/auth/signin?error=AccessDenied";
       }
     },
     async jwt({ token, user, trigger }) {
