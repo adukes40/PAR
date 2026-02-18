@@ -47,3 +47,9 @@ prisma/*.db-journal
 
 # claude
 .claude/
+.omc/
+
+# runtime/build artifacts
+/data/
+/prisma/dist/
+caddy-root-ca.crt
