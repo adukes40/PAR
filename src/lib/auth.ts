@@ -68,7 +68,10 @@ function buildProviders() {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 4 * 60 * 60, // 4 hours — auto-expire inactive sessions
+  },
   pages: {
     signIn: "/auth/signin",
   },
@@ -103,11 +106,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return "/auth/signin?error=AccessDenied";
         }
 
-        // Update role in DB based on group membership
+        // Update role in DB based on group membership.
+        // Use upsert because the signIn callback runs before the PrismaAdapter
+        // creates the user record, so the user may not exist yet.
         const role = mapGroupsToRole(groups);
-        await prisma.user.update({
+        await prisma.user.upsert({
           where: { email: user.email },
-          data: { role },
+          update: { role },
+          create: {
+            email: user.email,
+            name: user.name ?? user.email,
+            role,
+          },
         });
 
         return true;

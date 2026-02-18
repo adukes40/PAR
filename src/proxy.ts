@@ -51,7 +51,7 @@ function getAllowedRolesForApiWrite(pathname: string, method: string): string[] 
   return null;
 }
 
-export default auth((req) => {
+export const proxy = auth((req) => {
   const { pathname } = req.nextUrl;
   const method = req.method;
 
